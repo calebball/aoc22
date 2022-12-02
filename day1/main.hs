@@ -1,4 +1,5 @@
 import System.Environment
+import Data.List
 
 splitWhen :: (a -> Bool) -> [a] -> [[a]]
 splitWhen _ [] = []
@@ -12,4 +13,5 @@ main = do
   input <- readFile input_path
   let groups = splitWhen null (lines input)
   let parsed_groups = map (map read) groups
-  print (maximum (map sum parsed_groups))
+  let sorted_groups = reverse (sort (map sum parsed_groups))
+  print (sum (take 3 sorted_groups))
