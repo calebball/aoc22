@@ -1,8 +1,18 @@
 import System.Environment
 import Text.Read
 
+class Score a where
+  score :: a -> Int
+
+
 data Hand = Rock | Paper | Scissors
-  deriving Show
+  deriving (Show, Eq)
+  
+instance Score Hand where
+  score Rock = 1
+  score Paper = 2
+  score Scissors = 3
+  
 
 newtype OpponentHand = OpponentHand Hand
   deriving Show
@@ -13,6 +23,10 @@ instance Read OpponentHand where
     'B':s -> [(OpponentHand Paper, s)]
     'C':s -> [(OpponentHand Scissors, s)]
     _ -> []
+    
+instance Score OpponentHand where
+  score (OpponentHand h) = score h
+
 
 newtype MyHand = MyHand Hand
   deriving Show
@@ -24,6 +38,61 @@ instance Read MyHand where
     'Z':s -> [(MyHand Scissors, s)]
     _ -> []
     
+instance Score MyHand where
+  score (MyHand h) = score h
+
+    
+data Outcome = Win | Lose | Draw
+  deriving Show
+  
+instance Read Outcome where
+  readsPrec _ i = case i of
+    'X':s -> [(Lose, s)]
+    'Y':s -> [(Draw, s)]
+    'Z':s -> [(Win, s)]
+    _ -> []
+    
+instance Score Outcome where
+  score Win = 6
+  score Draw = 3
+  score Lose = 0
+  
+
+winsAgainst :: Hand -> Hand
+winsAgainst Rock = Paper
+winsAgainst Paper = Scissors
+winsAgainst Scissors = Rock
+
+drawsAgainst :: Hand -> Hand
+drawsAgainst h = h
+
+losesAgainst :: Hand -> Hand
+losesAgainst Rock = Scissors
+losesAgainst Paper = Rock
+losesAgainst Scissors = Paper
+
+matchingHand :: Hand -> Outcome -> Hand
+matchingHand h Win = winsAgainst h
+matchingHand h Draw = drawsAgainst h
+matchingHand h Lose = losesAgainst h
+  
+
+data RiggedGame = RiggedGame OpponentHand Outcome
+  deriving Show
+  
+instance Read RiggedGame where
+  readsPrec _ (h:' ':o:s) = 
+    let
+      hand = (read [h] :: OpponentHand)
+      outcome = (read [o] :: Outcome)
+    in
+      [(RiggedGame hand outcome, s)]
+  readsPrec _ _ = []
+  
+instance Score RiggedGame where
+  score (RiggedGame (OpponentHand h) o) = score (matchingHand h o) + score o
+   
+
 data Game = Game MyHand OpponentHand
   deriving Show
   
@@ -35,21 +104,18 @@ instance Read Game where
     in
       [(Game my op, s)]
   readsPrec _ _ = []
+
+instance Score Game where
+  score (Game (MyHand m) (OpponentHand o))
+    | m == winsAgainst o  = score Win + score m
+    | m == drawsAgainst o = score Draw + score m
+    | m == losesAgainst o = score Lose + score m
+    | otherwise = 0
   
-score :: Game -> Int
-score (Game (MyHand Rock)     (OpponentHand Rock))     = 3 + 1
-score (Game (MyHand Rock)     (OpponentHand Paper))    = 0 + 1
-score (Game (MyHand Rock)     (OpponentHand Scissors)) = 6 + 1
-score (Game (MyHand Paper)    (OpponentHand Rock))     = 6 + 2
-score (Game (MyHand Paper)    (OpponentHand Paper))    = 3 + 2
-score (Game (MyHand Paper)    (OpponentHand Scissors)) = 0 + 2
-score (Game (MyHand Scissors) (OpponentHand Rock))     = 0 + 3
-score (Game (MyHand Scissors) (OpponentHand Paper))    = 6 + 3
-score (Game (MyHand Scissors) (OpponentHand Scissors)) = 3 + 3
 
 main = do
   args <- getArgs
   let input_path = head args
   input <- readFile input_path
-  let games = map read (lines input) :: [Game]
+  let games = map read (lines input) :: [RiggedGame]
   print (sum (map score games))
