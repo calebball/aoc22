@@ -3,9 +3,17 @@ import Data.List
 import System.Environment
 
 type Item = Char
+  
+priority :: Item -> Int
+priority c
+  | isAsciiLower c = ord c - ord 'a' + 1
+  | isAsciiUpper c = ord c - ord 'A' + 27
+  | otherwise = 0
+
 
 type FrontCompartment = [Item]
 type BackCompartment = [Item]
+
 
 data Rucksack = Rucksack FrontCompartment BackCompartment
   deriving Show
@@ -21,11 +29,21 @@ incorrectItems :: Rucksack -> [Item]
 incorrectItems (Rucksack f b) =
   nub (filter (`elem` b) f)
   
-priority :: Item -> Int
-priority c
-  | isAsciiLower c = ord c - ord 'a' + 1
-  | isAsciiUpper c = ord c - ord 'A' + 27
-  | otherwise = 0
+allItems :: Rucksack -> [Item]
+allItems (Rucksack f b) = f ++ b
+  
+
+data Group = Group Rucksack Rucksack Rucksack
+  deriving Show
+
+fromRucksacks :: [Rucksack] -> [Group]
+fromRucksacks [] = []
+fromRucksacks (r1:r2:r3:rs) = Group r1 r2 r3 : fromRucksacks rs
+fromRucksacks _ = []
+  
+badge :: Group -> Item
+badge (Group r1 r2 r3) = head (allItems r1 `intersect` allItems r2 `intersect` allItems r3)
+
 
 main = do
   args <- getArgs
@@ -34,4 +52,6 @@ main = do
   let rucksacks = map read (lines input) :: [Rucksack]
   let mistakes = map incorrectItems rucksacks
   let priorities = map (sum . map priority) mistakes
-  print (sum priorities)
+  let groups = fromRucksacks rucksacks
+  let badges = map badge groups
+  print (sum (map priority badges))
