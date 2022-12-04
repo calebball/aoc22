@@ -37,10 +37,13 @@ containedIn a b = sections a `isSubsequenceOf` sections b
 isRedundantWith :: Assignment -> Assignment -> Bool
 isRedundantWith a b = (a `containedIn` b) || (b `containedIn` a)
 
+hasOverlapWith :: Assignment -> Assignment -> Bool
+hasOverlapWith a b = not (null (sections a `intersect` sections b))
+
 main = do
   args <- getArgs
   let input_path = head args
   input <- readFile input_path
   let parse_results = last (readP_to_S (many1 parseAssignmentPair) input)
   let assignment_pairs = fst parse_results
-  print (length (filter (uncurry isRedundantWith) assignment_pairs))
+  print (length (filter (uncurry hasOverlapWith) assignment_pairs))
