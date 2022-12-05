@@ -21,7 +21,7 @@ applyMove deck move = let
     (moving, newS) = splitAt (number move) oldS
     newDeck = beforeS ++ [newS] ++ afterS
     (beforeD, oldD:afterD) = splitAt (destination move) newDeck
-    newD = reverse moving ++ oldD
+    newD = moving ++ oldD
   in
     beforeD ++ [newD] ++ afterD
 
