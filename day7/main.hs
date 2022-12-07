@@ -1,6 +1,6 @@
 import Control.Applicative ((<|>))
 import Data.Char (isAlpha, isDigit, isPrint)
-import Data.List (sortBy, replicate)
+import Data.List (sort, replicate)
 import Data.Maybe (mapMaybe)
 import System.Environment
 import Text.ParserCombinators.ReadP as P
@@ -97,6 +97,15 @@ directorySizes _ = []
 solvePart1 :: FsEntry -> Int
 solvePart1 = sum . filter (< 100000) . map snd . directorySizes
 
+solvePart2 :: FsEntry -> Int
+solvePart2 d = let
+    totalSpace = 70000000
+    emptySpace = totalSpace - size d
+    reqdSpace = 30000000
+    needToFree = reqdSpace - emptySpace
+  in
+    head . dropWhile (< needToFree) . sort . map snd . directorySizes $ d
+
 
 main = do
   inputFile <- head <$> getArgs
@@ -105,3 +114,4 @@ main = do
   let fileSystem = head . foldl applyCommand [] $ commands
   let commandSteps = foldl applyCommand [] commands
   print . solvePart1 $ fileSystem
+  print . solvePart2 $ fileSystem
