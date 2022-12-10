@@ -1,12 +1,13 @@
 import Control.Applicative ((<|>))
 import Data.Char (isSpace, isDigit)
+import Data.Foldable (toList)
+import Data.List (intercalate)
+import Data.Sequence (fromList, chunksOf)
 import System.Environment
 import System.Exit
 import System.IO
 import Text.ParserCombinators.ReadP as P
 import Text.Read (readMaybe)
-import Data.Sequence
-import Data.Foldable
 
 newtype Registers = Registers { regX :: Int }
   deriving Show
@@ -17,6 +18,12 @@ data Instruction = Noop | Addx Int
 execute :: [Registers] -> Instruction -> [Registers]
 execute rs Noop = rs ++ [last rs]
 execute rs (Addx i) = let r = last rs in rs ++ [r, Registers (regX r + i)]
+
+spriteVisible :: Registers -> Int -> Bool
+spriteVisible (Registers x) i = let
+    pos = i `mod` 40
+  in
+    abs (x - pos) < 2
 
 parseNoop :: P.ReadP Instruction
 parseNoop = do
@@ -43,6 +50,15 @@ parseInput = do
   P.eof
   return result
   
+newtype Display = Display [Bool]
+
+instance Show Display where
+  show (Display pixels) = let
+      rows = map toList . toList . chunksOf 40 . fromList $ pixels
+    in
+      intercalate "\n" . map (map pixelToChar) $ rows
+    where pixelToChar b = if b then '#' else '.'
+  
 solvePart1 :: [Instruction] -> Int
 solvePart1 instructions = let
     regs = foldl execute [Registers 1] instructions
@@ -50,6 +66,12 @@ solvePart1 instructions = let
     signalStrength i = regX (regs !! (i - 1)) * i
   in
     sum . map signalStrength $ indices
+    
+solvePart2 :: [Instruction] -> Display
+solvePart2 instructions = let
+    regs = foldl execute [Registers 1] instructions
+  in
+    Display (zipWith spriteVisible regs (iterate (+ 1) 0))
 
 main = do
   args <- getArgs
@@ -58,7 +80,7 @@ main = do
       input <- readFile inputFile
       case P.readP_to_S parseInput input of
         [(instructions, "")] -> do
-          print . solvePart1 $ instructions
+          print . solvePart2 $ instructions
 
         _parseFailure -> do
           hPutStrLn stderr "Failed to parse input file"
