@@ -8,7 +8,7 @@ import System.Environment
 import System.Exit
 import System.IO
 import Text.ParserCombinators.ReadP as P
-import Debug.Trace
+import Text.Read (readMaybe)
 
 type Item = Int
 
@@ -16,7 +16,7 @@ data Monkey = Monkey {
   number :: Int,
   items :: [Item],
   operation :: Int -> Int,
-  test :: Int -> Bool,
+  divisor :: Int,
   targetWhenTrue :: Int,
   targetWhenFalse :: Int,
   inspections :: Int
@@ -46,11 +46,10 @@ parseOperation = do
     "old" -> return (\n -> op n n)
     d -> return (op (read d))
     
-parseTest :: ReadP (Int -> Bool)
+parseTest :: ReadP Int
 parseTest = do
   P.string "Test: divisible by "
-  value <- read <$> P.munch1 isDigit
-  return (\n -> n `mod` value == 0)
+  read <$> P.munch1 isDigit
   
 parseWhenTrue :: ReadP Int
 parseWhenTrue = do
@@ -82,36 +81,39 @@ parseMonkey = do
 parseInput :: ReadP [Monkey]
 parseInput = P.sepBy parseMonkey P.skipSpaces
 
+productOfDivisors :: Map.Map Int Monkey -> Int
+productOfDivisors = product . map divisor . Map.elems
+
 throwItem :: Map.Map Int Monkey -> Int -> Item -> Map.Map Int Monkey
 throwItem ms target item = Map.adjust addItem target ms
-  where addItem (Monkey n items op t wt wf ins) = Monkey n (item:items) op t wt wf ins
+  where addItem (Monkey n items op d wt wf ins) = Monkey n (item:items) op d wt wf ins
 
 inspectItems :: Map.Map Int Monkey -> Int -> Map.Map Int Monkey
 inspectItems ms n = let
-    Monkey _ items op t wt wf ins = ms Map.! n
-    inspected = map ((\v -> (bool wf wt (t v), v)) . (`div` 3) . op) items
+    Monkey _ items op d wt wf ins = ms Map.! n
+    inspected = map ((\v -> (bool wf wt (v `mod` d == 0), v `mod` productOfDivisors ms)) . op) items
   in
-    Map.insert n (Monkey n [] op t wt wf (ins + length inspected)) . foldl (\ms (t, i) -> throwItem ms t i) ms $ inspected
+    Map.insert n (Monkey n [] op d wt wf (ins + length inspected)) . foldl (\ms (t, i) -> throwItem ms t i) ms $ inspected
     
 keepAwayRound :: Map.Map Int Monkey -> Map.Map Int Monkey
 keepAwayRound ms = foldl inspectItems ms [0 .. (maximum . Map.keys $ ms)]
 
-solvePart1 :: Map.Map Int Monkey -> Int
-solvePart1 ms = let
-    round = iterate keepAwayRound ms
+solve :: Map.Map Int Monkey -> Int -> Int
+solve ms rounds = let
+    roundResults = iterate keepAwayRound ms
   in
-    product . take 2 . reverse . sort . Map.elems . Map.map inspections $ round !! 20
+    product . take 2 . reverse . sort . Map.elems . Map.map inspections $ roundResults !! rounds
 
 main = do
   args <- getArgs
   case args of
-    [inputFile] -> do
+    [r, inputFile] | Just rounds <- readMaybe r -> do
       input <- readFile inputFile
       let parsedInput = fst . last . P.readP_to_S parseInput $ input
       let monkeys = Map.fromList . map (\m -> (number m, m)) $ parsedInput
-      print (solvePart1 monkeys)
+      print (solve monkeys rounds)
       
     _failure -> do
       name <- getProgName
-      hPutStrLn stderr $ "usage: " ++ name ++ " [input file]"
+      hPutStrLn stderr $ "usage: " ++ name ++ " [number of rounds] [input file]"
       exitFailure
