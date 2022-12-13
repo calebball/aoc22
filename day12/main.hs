@@ -71,40 +71,19 @@ endPosition :: HeightMap -> String -> Position
 endPosition m = keyToPosition m . fromJust . elemIndex 'E' . filter (/= '\n')
 
 
-formatInt :: Int -> String
-formatInt i
-  | i == 0 = " S"
-  | i == 27 = " E"
-  | i < 10 = " " ++ show i
-  | otherwise = show i
-
-formatD :: Maybe Int -> String
-formatD Nothing = "  ."
-formatD (Just i)
-  | i == 0 = "  S"
-  | i < 10 = "  " ++ show i
-  | i < 100 = " " ++ show i
-  | otherwise = show i
-
-
 main = do
   inputFile <- head <$> getArgs
   input <- readFile inputFile
   let heights = parseHeightMap input
-  putStrLn . unlines . map (unwords . map formatInt) . transpose $ heights
   let graph = buildGraph heights
   let start = startPosition heights input
   let end = endPosition heights input
-  print start
-  print end
+
   let search = iterate (searchStep heights graph) (Map.fromList [(start, 0)])
   let completeSearch = fromJust . find (Map.member end) $ search
-  putStrLn . unlines
-           . map (unwords . map formatD)
-           . transpose
-           . map (map (\p -> Map.lookup p $ completeSearch
-      ))
-           . groupBy (\a b -> snd a == snd b)
-           . positions
-           $ heights
   print . Map.lookup end $ completeSearch
+  
+  let height1Positions = filter (\p -> 1 == lookUpHeight heights p) (positions heights)
+  let search = iterate (searchStep heights graph) (Map.fromList (zip height1Positions (repeat 0)))
+  let completeRevSearch = fromJust . find (Map.member end) $ search
+  print . Map.lookup end $ completeRevSearch
