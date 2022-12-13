@@ -1,11 +1,13 @@
 import Control.Applicative ((<|>))
 import Data.Char (isDigit)
-import Data.List (findIndices)
-import Data.Maybe (fromMaybe)
+import Data.List (elemIndex, findIndices, sortBy)
+import Data.Maybe (fromMaybe, fromJust)
 import System.Environment
 import Text.ParserCombinators.ReadP as P
+import Debug.Trace
 
 data Packet = Number Int | Packet [Packet]
+  deriving Eq
 
 instance Show Packet where
   show (Number n) = show n
@@ -43,10 +45,29 @@ areOrdered (Packet _, Packet []) = Just False
 areOrdered (Packet (a:as), Packet (b:bs)) = case areOrdered (a, b) of
   Nothing -> areOrdered (Packet as, Packet bs)
   Just b -> Just b
+  
+packetCompare :: Packet -> Packet -> Ordering
+packetCompare a b = case areOrdered (a, b) of
+  Just True -> LT
+  Just False -> GT
+  Nothing -> EQ
 
+
+solvePart1 :: [(Packet, Packet)] -> Int
+solvePart1 = sum . map (+ 1) . findIndices (fromMaybe False . areOrdered)
+
+solvePart2 :: [Packet] -> Int
+solvePart2 ps = let
+    sorted = sortBy packetCompare ps
+    firstDivider = Packet [Packet [Number 2]]
+    secondDivider = Packet [Packet [Number 6]]
+  in
+    (fromJust (elemIndex firstDivider sorted) + 1) * (fromJust (elemIndex secondDivider sorted) + 1)
 
 main = do
   [inputFile] <- getArgs
   input <- readFile inputFile
   let (packetPairs, unparsedInput) = last . readP_to_S parseInput $ input
-  print . sum . map (+ 1) . findIndices (fromMaybe False . areOrdered) $ packetPairs
+  let packets = [Packet [Packet [Number 2]], Packet [Packet [Number 6]]] ++ uncurry (++) (unzip packetPairs)
+  print . solvePart1 $ packetPairs
+  print . solvePart2 $ packets
