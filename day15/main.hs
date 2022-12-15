@@ -1,4 +1,6 @@
 import Data.Char (isDigit)
+import Data.List (findIndex, nub, sortBy)
+import Data.Maybe (mapMaybe)
 import qualified Data.Set as Set
 import System.Environment
 import Text.ParserCombinators.ReadP as P
@@ -41,22 +43,76 @@ distance c1 c2 = xDistance c1 c2 + yDistance c1 c2
 beaconDistance :: Sensor -> Int
 beaconDistance (Sensor s b) = distance s b
 
-blocksInRow :: Int -> Sensor -> [Int]
+data Interval = Interval { start :: Int, end :: Int }
+
+instance Show Interval where
+  show (Interval s e) = "[" ++ show s ++ ", " ++ show e ++ "]"
+
+sizeOfInterval :: Interval -> Int
+sizeOfInterval (Interval s e) = e - s + 1
+
+areDisjoint :: Interval -> Interval -> Bool
+areDisjoint (Interval startA endA) (Interval startB endB)
+  | startB > endA = True
+  | startA > endB = True
+  | otherwise = False
+
+unionIntervals :: [Interval] -> [Interval]
+unionIntervals (a : b : xs)
+  | areDisjoint a b = a : unionIntervals (b:xs)
+  | end a >= start b = unionIntervals (Interval (minimum . map start $ [a, b]) (maximum . map end $ [a, b]):xs)
+  | end b >= start a = unionIntervals (Interval (minimum . map start $ [a, b]) (maximum . map end $ [a, b]):xs)
+  | otherwise = a : unionIntervals (b:xs)
+unionIntervals xs = xs
+
+subtractInterval :: Interval -> Interval -> [Interval]
+subtractInterval (Interval startA endA) (Interval startB endB)
+  | startA == startB && endA == endB = []
+  | startA == startB && endA > endB = [Interval endB endA]
+  | startA == startB && endA < endB = []
+  | startA < startB && endA == endB = [Interval startA startB]
+  | startA < startB && endA > endB = [Interval startA startB, Interval endA endB]
+  | startA < startB && endA < endB = [Interval startA startB]
+  | startA > startB && endA == endB = []
+  | startA > startB && endA > endB = [Interval endB endA]
+  | startA > startB && endA < endB = []
+  | otherwise = []
+  
+differenceIntervals :: [Interval] -> [Interval] -> [Interval]
+differenceIntervals [] _ = []
+differenceIntervals (a:as) bs = concatMap (subtractInterval a) bs ++ differenceIntervals as bs
+
+
+blocksInRow :: Int -> Sensor -> Maybe Interval
 blocksInRow y s = let
     (sensorX, sensorY) = position s
     halfInterval = beaconDistance s - abs (y - sensorY)
-  in [sensorX - halfInterval .. sensorX + halfInterval]
+  in if halfInterval < 0
+    then Nothing
+    else Just (Interval (sensorX - halfInterval) (sensorX + halfInterval))
 
 solvePart1 :: Int -> [Sensor] -> Int
 solvePart1 y sensors = let
-    covered = Set.unions . map (Set.fromList . blocksInRow y) $ sensors
-    beacons = Set.fromList . map fst . filter (\b -> snd b == y) . map nearestBeacon $ sensors
-  in Set.size (Set.difference covered beacons)
+    covered = unionIntervals . mapMaybe (blocksInRow y) $ sensors
+    numCovered = sum . map sizeOfInterval $ covered
+    numBeacons = length . nub . filter (\b -> snd b == y) . map nearestBeacon $ sensors
+  in numCovered - numBeacons
+  
+solvePart2 :: Int -> [Int] -> [Sensor] -> Maybe Int
+solvePart2 bound (y:ys) sensors = let
+    allIntervals = sortBy (\a b -> compare (start a) (start b)) . mapMaybe (blocksInRow y) $ sensors
+    covered = unionIntervals allIntervals
+    uncovered = differenceIntervals [Interval 0 bound] covered
+  in if null uncovered then solvePart2 bound ys sensors else
+    let
+      x = start (head uncovered) + 1
+    in Just (x * 4000000 + y)
+solvePart2 _ [] _ = Nothing
 
 
 main = do
-  [rowString, inputFile] <- getArgs
+  [inputValue, inputFile] <- getArgs
   input <- readFile inputFile
-  let row = read rowString
+  let value = read inputValue
   let sensors = fst . last . P.readP_to_S parseInput $ input
-  print . solvePart1 row $ sensors
+  print . solvePart2 value [0..value] $ sensors
