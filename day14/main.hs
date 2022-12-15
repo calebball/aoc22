@@ -1,8 +1,8 @@
 import Data.Char (isDigit)
-import Data.Maybe (fromJust, isJust)
+import Data.Maybe (fromJust, isJust, fromMaybe)
+import qualified Data.Map as Map
 import System.Environment
 import Text.ParserCombinators.ReadP as P
-import Debug.Trace
 
 type Coordinate = (Int, Int)
 
@@ -28,10 +28,10 @@ parsePaths :: ReadP [[Path]]
 parsePaths = P.sepBy parsePath (P.char '\n')
 
 
-data Space = Empty | Rock | Sand
-
-data Grid = Grid { paths :: [Path], sand :: [Coordinate] }
-  deriving Show
+type Grid = Map.Map Int [Int]
+  
+makeGrid :: [Path] -> Grid
+makeGrid ps = Map.fromList . map (\y -> (y, concatMap (intersectsRow y) ps)) $ [0 .. lastRow ps]
 
 intersectsRow :: Int -> Path -> [Int]
 intersectsRow y ((x1, y1), (x2, y2))
@@ -41,36 +41,45 @@ intersectsRow y ((x1, y1), (x2, y2))
   | y1 == y && y2 == y && x2 <= x1 = [x2 .. x1]
   | otherwise = []
 
-inRow :: Grid -> Int -> [Int]
-inRow g y = concatMap (intersectsRow y) (paths g) ++ (map fst . filter ((== y) . snd) $ sand g)
+inRow :: Int -> Grid -> [Int]
+inRow y = fromMaybe [] . Map.lookup y
+
+lastRow :: [Path] -> Int
+lastRow = maximum . concatMap (\((x1, y1), (x2, y2)) -> [y1, y2])
   
-inVoid :: Grid -> Int -> Bool
-inVoid g y = all (y >) . concatMap (\((x1, y1), (x2, y2)) -> [y1, y2]) $ paths g
+inVoid :: Int -> Grid -> Bool
+inVoid y = (y >) . maximum . Map.keys
+
+inGrid :: Coordinate -> Grid -> Bool
+inGrid (x, y) = elem x . inRow y
   
 moveSand :: Grid -> Coordinate -> Maybe Coordinate
 moveSand g (x, y)
-  | inVoid g y = Nothing
+  | inGrid (x, y) g = Nothing
+  | inVoid y g = Nothing
   | x `notElem` nextRow = moveSand g (x, y + 1)
   | (x - 1) `notElem` nextRow = moveSand g (x - 1, y + 1)
   | (x + 1) `notElem` nextRow = moveSand g (x + 1, y + 1)
   | otherwise = Just (x, y)
-  where nextRow = inRow g (y + 1)
-  
-moveSand' g c = let r = moveSand g c in trace ("    moveSand from " ++ show c ++ " to " ++ show r) r
+  where nextRow = inRow (y + 1) g
   
 addSand :: Maybe Grid -> Maybe Grid
 addSand (Just g) = case moveSand g (500, 0) of
-  Just c -> Just (Grid (paths g) (c : sand g))
+  Just (x, y) -> Just (Map.insertWith (++) y [x] g)
   Nothing -> Nothing
 addSand Nothing = Nothing
 
-solvePart1 :: Grid -> Int
-solvePart1 g = length . sand . last . map fromJust . takeWhile isJust . iterate addSand $ Just g
+solve :: Grid -> Int
+solve = (\n -> n - 1) . length . takeWhile isJust . iterate addSand . Just
 
 
 main = do
   [inputFile] <- getArgs
   input <- readFile inputFile
   let paths = concat . fst . last . P.readP_to_S parsePaths $ input
-  let grid = Grid paths []
-  print . solvePart1 $ grid
+  let y = lastRow paths + 2
+  let floor = ((495 - y, y), (505 + y, y))
+  putStr "Part 1: "
+  print . solve $ makeGrid paths
+  putStr "Part 2: "
+  print . solve $ makeGrid (floor:paths)
