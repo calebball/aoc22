@@ -1,3 +1,6 @@
+import qualified Data.IntMap as Map
+import Data.List (find)
+import Data.Maybe (isJust)
 import System.Environment
 import Debug.Trace
 
@@ -68,19 +71,35 @@ place c (Rock s p h) = let
         (maskPrefix, maskOverlap) = splitAt (length m - h) m
       in maskPrefix ++ prefix ++ zipWith (zipWith (||)) maskOverlap overlap ++ suffix
 
-placeRock :: (Chamber, [Jet]) -> Rock -> (Chamber, [Jet])
-placeRock (_, []) _ = error "Jets ended?"
-placeRock (c, j:js) r = let
-    pushed = if collision c (pushRock r j) then r else pushRock r j
+moveRock :: [(Int, Jet)] -> Chamber -> Rock -> (Rock, [(Int, Jet)])
+moveRock [] _ _ = error "Jets ended?"
+moveRock (j:js) c r = let
+    pushed = if collision c (pushRock r (snd j)) then r else pushRock r (snd j)
   in if collision c (dropRock pushed)
-    then (place c pushed, js)
-    else placeRock (c, js) (dropRock pushed)
+    then (pushed, js)
+    else moveRock js c (dropRock pushed)
 
-addRocks :: [Shape] -> (Chamber, [Jet]) -> [(Chamber, [Jet])]
-addRocks [] _ = error "Ran out of shapes?"
-addRocks (s:nextShapes) state = let
-    nextState = placeRock state (Rock s 2 (-3))
-  in nextState : addRocks nextShapes nextState
+addRocks :: [Shape] -> [(Int, Jet)] -> Chamber -> Int -> Chamber
+addRocks [] _ _ _ = error "Ran out of shapes?"
+addRocks _ [] _ _ = error "Ran out of jets?"
+addRocks _ _ c 0 = c
+addRocks (s:nextShapes) js c n = let
+    (newRock, nextJets) = moveRock js c (Rock s 2 (-3))
+    nextChamber = place c newRock
+  in addRocks nextShapes nextJets nextChamber (n - 1)
+  
+addRocksUntilRepeat :: [Shape] -> Map.IntMap [(Int, Rock, Chamber)] -> [(Int, Jet)] -> Int -> Chamber -> (Int, Int, Chamber)
+addRocksUntilRepeat [] _ _ _ _ = error "Ran out of shapes?"
+addRocksUntilRepeat _ _ [] _ _ = error "Ran out of jets?"
+addRocksUntilRepeat (s:nextShapes) m ((i, j):js) n c = let
+    (newRock, nextJets) = moveRock ((i, j):js) c (Rock s 2 (-3))
+    nextChamber = place c newRock
+    previousPlacements = Map.findWithDefault [] i m
+    nextMap = Map.insert i ((n, newRock, take 10 nextChamber) : previousPlacements) m
+    repeat = find (\(_, _, oldChamber) -> take 10 nextChamber == oldChamber) previousPlacements
+  in if isJust repeat
+    then let Just (lastRepeat, lastHeight, _) = repeat in (lastRepeat, n, nextChamber)
+    else addRocksUntilRepeat nextShapes nextMap nextJets (n + 1) nextChamber
 
 showChamber :: Chamber -> String
 showChamber [] = "+-------+"
@@ -89,8 +108,23 @@ showChamber (c:cs) = "|" ++ map (\b -> if b then '#' else ' ') c ++ "|\n" ++ sho
 main = do
   [inputFile] <- getArgs
   input <- readFile inputFile
-  let jets = map (read . pure) (head . lines $ input) :: [Jet]
-  let chamber = []
-  let states = addRocks (cycle [Flat, Cross, Corner, Column, Block]) (chamber, cycle jets)
-  putStrLn . showChamber . fst $ states !! 2021
-  print . length . fst $ states !! 2021
+  let shapes = cycle [Flat, Cross, Corner, Column, Block]
+  let jets = cycle . zip [0..] . map (read . pure) . head . lines $ input :: [(Int, Jet)]
+  
+  let (repeatStart, repeatEnd, chamber) = addRocksUntilRepeat shapes Map.empty jets 1 []
+  let repeatPeriod = repeatEnd - repeatStart
+  
+  print (repeatStart, repeatEnd, repeatPeriod)
+  putStrLn . showChamber . take 10 . addRocks shapes jets [] $ repeatStart
+  putStrLn . showChamber . take 10 . addRocks shapes jets [] $ repeatEnd
+  putStrLn . showChamber . take 10 . addRocks shapes jets [] $ repeatEnd + repeatPeriod
+  
+  let repeatStartHeight = length . addRocks shapes jets [] $ repeatStart
+  let repeatEndHeight = length . addRocks shapes jets [] $ repeatEnd
+  let heightGain = repeatEndHeight - repeatStartHeight
+  
+  let (numRepeats, remainingPlacements) = 1000000000000 `quotRem` repeatPeriod
+  
+  print (heightGain * numRepeats)
+  print (length . addRocks shapes jets [] $ remainingPlacements)
+  print ((heightGain * numRepeats) + (length . addRocks shapes jets [] $ remainingPlacements))
